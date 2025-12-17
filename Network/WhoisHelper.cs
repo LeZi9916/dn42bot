@@ -17,13 +17,13 @@ internal class WhoisHelper
             Port = Core.Config.Network.Whois.Port
         };
     }
-    public static async Task<WhoisQueryResult<uint>> QueryASNFromIPAddressAsync(IPAddress address)
+    public static async Task<WhoisQueryResult<uint>> QueryASNFromIPAddressAsync(IPAddress address, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(address, nameof(address));
         try
         {
             var addressStr = address.ToString();
-            var queryResult = await WhoisClient.QueryAsync(addressStr, WHOIS_QUERY_OPTIONS);
+            var queryResult = await WhoisClient.QueryAsync(addressStr, WHOIS_QUERY_OPTIONS, token);
             if (queryResult is null)
             {
                 return new()

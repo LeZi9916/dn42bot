@@ -894,15 +894,20 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                                 isFirst = false;
                             }
                             rttLeftPaddingLength = OUTPUT_TRACE_RTT_LEFT_PADDING_LENGTH;
-                            var whoisResult = await WhoisHelper.QueryASNFromIPAddressAsync(hopAddress);
+                            var whoisResult = default(WhoisQueryResult<uint>);
                             var asn = "*";
                             var isDnsHasError = false;
                             var dnsQueryResult = default(IDnsQueryResponse);
                             try
                             {
                                 var dnsReq = LookupClient.GetReverseQuestion(hopAddress);
-                                (isDnsHasError, dnsQueryResult) = await DnsLookupAsync(dnsReq);
+                                (isDnsHasError, dnsQueryResult) = await DnsLookupAsync(dnsReq, token: cancellationToken);
+                                whoisResult = await WhoisHelper.QueryASNFromIPAddressAsync(hopAddress, cancellationToken)
                                 isDnsHasError = !isDnsHasError;
+                            }
+                            catch(OperationCanceledException)
+                            {
+                                break;
                             }
                             catch
                             {
@@ -1141,7 +1146,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
             {
                 foreach(var queryType in queryTypes)
                 {
-                    var (isSuccessfully, dnsQueryResult) = await DnsLookupAsync(domain, queryType, QueryClass.IN, dnsOptions, true);
+                    var (isSuccessfully, dnsQueryResult) = await DnsLookupAsync(domain, queryType, QueryClass.IN, dnsOptions, true, cancellationToken);
                     dnsQueryResults.Add((isSuccessfully, dnsQueryResult));
                 }
                 using var dnsRecords = new RentedList<DnsResourceRecord>();
@@ -1388,7 +1393,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
         }
         return other.RequestId == _requestId;
     }
-    async ValueTask<IPAddress?> GetIPAddressFromArgs(string hostname, bool forceIPv4, bool forceIPv6)
+    async ValueTask<IPAddress?> GetIPAddressFromArgs(string hostname, bool forceIPv4, bool forceIPv6, CancellationToken token = default)
     {
         var queryType = QueryType.AAAA;
         var isForce = forceIPv4 || forceIPv6;
@@ -1401,7 +1406,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
             queryType = QueryType.AAAA;
         }
     RETRY:
-        var (isSuccessfully, queryResult) = await DnsLookupAsync(hostname, queryType);
+        var (isSuccessfully, queryResult) = await DnsLookupAsync(hostname, queryType,token: token);
         if (!isSuccessfully || queryResult is null)
         {
             goto FALLBACK;
@@ -1435,11 +1440,15 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
         QueryType queryType = QueryType.A,
         QueryClass queryClass = QueryClass.IN,
         DnsQueryAndServerOptions? options = null,
-        bool bypassCache = false)
+        bool bypassCache = false,
+        CancellationToken token = default)
     {
-        return DnsLookupAsync(new DnsQuestion(query, queryType, queryClass),options, bypassCache);
+        return DnsLookupAsync(new DnsQuestion(query, queryType, queryClass),options, bypassCache, token);
     }
-    async ValueTask<(bool IsSuccessfully,IDnsQueryResponse? Response)> DnsLookupAsync(DnsQuestion query, DnsQueryAndServerOptions? options = null, bool bypassCache = false)
+    async ValueTask<(bool IsSuccessfully,IDnsQueryResponse? Response)> DnsLookupAsync(DnsQuestion query, 
+        DnsQueryAndServerOptions? options = null, 
+        bool bypassCache = false,
+        CancellationToken token = default)
     {
         var queryResult = default(IDnsQueryResponse);
         var isSuccessfully = false;
@@ -1451,8 +1460,12 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
         {
             try
             {
-                queryResult = await _dnsClient.QueryAsync(query, options ?? _dnsLookupOptions);
+                queryResult = await _dnsClient.QueryAsync(query, options ?? _dnsLookupOptions, token);
                 isSuccessfully = !queryResult.HasError;
+            }
+            catch(OperationCanceledException)
+            {
+                return (isSuccessfully, queryResult);
             }
             catch (Exception e)
             {
