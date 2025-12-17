@@ -16,7 +16,7 @@ A telegram bot for dn42 Network
 
 ## Get Started
 
-You can get the latest from the [Releases](https://github.com/LeZi9916/dn42bot/releases), build it yourself.
+You can get the latest from the [Releases](https://github.com/LeZi9916/dn42bot/releases),or build it yourself.
 
 - Before proceeding, please ensure you have the dotnet runtime(9.0 or later) installed
 - Upon its first run, dn42bot will generate `config.json` in the current directory
