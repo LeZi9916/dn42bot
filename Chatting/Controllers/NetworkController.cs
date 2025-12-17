@@ -55,15 +55,18 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
     readonly AsyncLock _executeLock = new();
     readonly AsyncLock _callbackLock = new();
 
-    readonly static LookupClientOptions _dnsLookupOptions = new(new NameServer(IPAddress.Parse(DEFAULT_NAMESERVER_ADDR), 53))
-    {
-        Timeout = TimeSpan.FromMilliseconds(500),
-        ThrowDnsErrors = false
-    };
-
+    readonly static LookupClientOptions _dnsLookupOptions;
+    readonly static IPAddress DEFAULT_NAMESERVER_ADDRESS = Core.Config.Network.DNS.Address;
     const uint OUTPUT_TRACE_RTT_LEFT_PADDING_LENGTH = 48;
-    const string DEFAULT_NAMESERVER_ADDR = "192.168.3.254";
 
+    static NetworkController()
+    {
+        _dnsLookupOptions = new(new NameServer(DEFAULT_NAMESERVER_ADDRESS, Core.Config.Network.DNS.Port))
+        {
+            Timeout = TimeSpan.FromMilliseconds(Core.Config.Network.DNS.TimeoutMS),
+            ThrowDnsErrors = false
+        };
+    }
     NetworkController(UserRequest userRequest, ChatRoom chatRoom)
     {
         _chatRoom = chatRoom;
@@ -1038,8 +1041,9 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                                 return;
                             }
                             break;
+                        case "p":
                         case "t":
-                            break;
+                            break;                        
                         default:
                             _ = PrintNsLookupHelpTextAsync($"Error: unexpected option \"{text.ToString()}\"");
                             return;
@@ -1068,6 +1072,17 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                                 return;
                             }
                             break;
+                        case "p":
+                            if (ushort.TryParse(text, out var p))
+                            {
+                                port = p;
+                            }
+                            else
+                            {
+                                _ = PrintNsLookupHelpTextAsync($"Error: invalid ns port \"{text.ToString()}\"");
+                                return;
+                            }
+                            break;
                         default:
                             if (text.Length > 5 && text.Slice(text.Length - 5).Equals(".dn42", StringComparison.OrdinalIgnoreCase))
                             {
@@ -1093,7 +1108,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                 await PrintNsLookupHelpTextAsync("Error: missing domain");
                 return;
             }
-            nsAddr ??= IPAddress.Parse(DEFAULT_NAMESERVER_ADDR);
+            nsAddr ??= DEFAULT_NAMESERVER_ADDRESS;
             if(queryTypes.Count == 0)
             {
                 queryTypes.Add(QueryType.A);

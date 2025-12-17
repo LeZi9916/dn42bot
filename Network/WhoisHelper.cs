@@ -8,61 +8,77 @@ namespace dn42Bot.Network;
 
 internal class WhoisHelper
 {
-    const string WHOIS_SERVER_IPENDPOINT = "172.22.137.116";
-    readonly static WhoisQueryOptions WHOIS_QUERY_OPTIONS = new()
+    readonly static WhoisQueryOptions? WHOIS_QUERY_OPTIONS;
+    static WhoisHelper()
     {
-        Server = WHOIS_SERVER_IPENDPOINT,
-    };
+        WHOIS_QUERY_OPTIONS = new()
+        {
+            Server = Core.Config.Network.Whois.Address.ToString(),
+            Port = Core.Config.Network.Whois.Port
+        };
+    }
     public static async Task<WhoisQueryResult<uint>> QueryASNFromIPAddressAsync(IPAddress address)
     {
         ArgumentNullException.ThrowIfNull(address, nameof(address));
-        var addressStr = address.ToString();
-        var queryResult = await WhoisClient.QueryAsync(addressStr, WHOIS_QUERY_OPTIONS);
-        if(queryResult is null)
+        try
         {
+            var addressStr = address.ToString();
+            var queryResult = await WhoisClient.QueryAsync(addressStr, WHOIS_QUERY_OPTIONS);
+            if (queryResult is null)
+            {
+                return new()
+                {
+                    IsSuccessfully = false,
+                    Result = 0
+                };
+            }
+            var rawRsp = queryResult.Raw;
+            var routeObjectStartAt = rawRsp.LastIndexOf("route:");
+            if (routeObjectStartAt is -1)
+            {
+                routeObjectStartAt = rawRsp.LastIndexOf("route6:");
+            }
+            if (routeObjectStartAt is not -1)
+            {
+                var originStartAt = rawRsp.IndexOf("origin:", routeObjectStartAt);
+                if (originStartAt is not -1)
+                {
+                    originStartAt += "origin:".Length;
+                    var originEndAt = rawRsp.IndexOf('\n', originStartAt);
+                    if (originEndAt is -1)
+                    {
+                        originEndAt = rawRsp.Length;
+                    }
+                    var originStr = rawRsp.AsSpan()[originStartAt..originEndAt].Trim();
+                    if (originStr.StartsWith("AS", StringComparison.OrdinalIgnoreCase))
+                    {
+                        originStr = originStr[2..];
+                    }
+                    if (uint.TryParse(originStr, out var asn))
+                    {
+                        return new()
+                        {
+                            IsSuccessfully = true,
+                            Result = asn
+                        };
+                    }
+                }
+            }
+            // route object not found
             return new()
             {
                 IsSuccessfully = false,
                 Result = 0
             };
         }
-        var rawRsp = queryResult.Raw;
-        var routeObjectStartAt = rawRsp.LastIndexOf("route:");
-        if(routeObjectStartAt is -1)
+        catch(Exception e)
         {
-            routeObjectStartAt = rawRsp.LastIndexOf("route6:");
-        }
-        if(routeObjectStartAt is not -1)
-        {
-            var originStartAt = rawRsp.IndexOf("origin:", routeObjectStartAt);
-            if(originStartAt is not -1)
+            BotLogger.LogError(e);
+            return new()
             {
-                originStartAt += "origin:".Length;
-                var originEndAt = rawRsp.IndexOf('\n', originStartAt);
-                if(originEndAt is -1)
-                {
-                    originEndAt = rawRsp.Length;
-                }
-                var originStr = rawRsp.AsSpan()[originStartAt..originEndAt].Trim();
-                if(originStr.StartsWith("AS", StringComparison.OrdinalIgnoreCase))
-                {
-                    originStr = originStr[2..];
-                }
-                if(uint.TryParse(originStr, out var asn))
-                {
-                    return new()
-                    {
-                        IsSuccessfully = true,
-                        Result = asn
-                    };
-                }
-            }
+                IsSuccessfully = false,
+                Result = 0
+            };
         }
-        // route object not found
-        return new()
-        {
-            IsSuccessfully = false,
-            Result = 0
-        };
     }
 }

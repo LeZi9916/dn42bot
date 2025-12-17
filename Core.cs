@@ -22,6 +22,13 @@ namespace dn42Bot
             }
         }
         public static DateTime StartAt { get; } = DateTime.Now;
+        public static BotConfig Config
+        {
+            get
+            {
+                return _botConfig;
+            }
+        }
 
         static long _botId = 0;
         static string _botUsername = string.Empty;
