@@ -902,7 +902,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                             {
                                 var dnsReq = LookupClient.GetReverseQuestion(hopAddress);
                                 (isDnsHasError, dnsQueryResult) = await DnsLookupAsync(dnsReq, token: cancellationToken);
-                                whoisResult = await WhoisHelper.QueryASNFromIPAddressAsync(hopAddress, cancellationToken)
+                                whoisResult = await WhoisHelper.QueryASNFromIPAddressAsync(hopAddress, cancellationToken);
                                 isDnsHasError = !isDnsHasError;
                             }
                             catch(OperationCanceledException)
