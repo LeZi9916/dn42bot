@@ -9,6 +9,7 @@ namespace dn42Bot.TelegramBot;
 
 internal static class ChatExtensions
 {
+#if NET10_0_OR_GREATER
     extension(Chat @this)
     {
         public bool IsPrivateChat
@@ -33,6 +34,7 @@ internal static class ChatExtensions
             }
         }
     }
+#endif
     public static async Task<Message> SendMessageAsync(this Chat chat, string text, 
         ITelegramBotClient client, 
         ParseMode parseMode = ParseMode.None, 

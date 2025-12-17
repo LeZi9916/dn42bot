@@ -284,7 +284,7 @@ internal class RentedList<T> : IList<T>, ICollection<T>, IReadOnlyList<T>, IDisp
         _array[_size++] = item;
         _version++;
     }
-    public void AddRange(IEnumerable<T> items)
+    public void AddRange<T2>(T2 items) where T2: IEnumerable<T>
     {
         ThrowIfDisposed();
         if (items == null)
@@ -294,14 +294,6 @@ internal class RentedList<T> : IList<T>, ICollection<T>, IReadOnlyList<T>, IDisp
         foreach (var item in items)
         {
             Add(item);
-        }
-    }
-    public void AddRange(ReadOnlySpan<T> items)
-    {
-        ThrowIfDisposed();
-        for (var i = 0; i < items.Length; i++)
-        {
-            Add(items[i]);
         }
     }
     public void Insert(int index, T item)

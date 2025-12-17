@@ -10,16 +10,18 @@ internal struct PingOptions
     {
         get
         {
-            return field;
+            return _ttl;
         }
         set
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
-            field = value;
+            _ttl = value;
         }
-    } = 64;
+    }
     public bool DontFragment { get; set; } = false;
     public TimeSpan Timeout { get; set; } = TimeSpan.FromMilliseconds(2000);
+
+    short _ttl = 64;
     public PingOptions()
     {
 
