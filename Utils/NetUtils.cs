@@ -48,30 +48,72 @@ internal static class NetUtils
     
     static async Task<PingReply> InternalPing6Async(IPAddress host, ReadOnlyMemory<byte> payload, PingOptions options = default, CancellationToken token = default)
     {
-        const int ICMP_FIXED_LENGTH = 4;
+        const int ICMP_FIXED_LENGTH = 8;
         const int IP_HEADER_LENGTH = 0;
         const int TTL_POSITION = 7;
 
         using var socket = new Socket(AddressFamily.InterNetworkV6, SocketType.Raw, ProtocolType.IcmpV6);
         using var cts = new CancellationTokenSource(options.Timeout);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, cts.Token);
-        var packet = IcmpV6Packet.Create(IcmpV6Type.EchoRequest, payload.Span);
+        var rentedBuffer = ArrayPool<byte>.Shared.Rent(Math.Max(((IP_HEADER_LENGTH + ICMP_FIXED_LENGTH) * 2) + payload.Length, 1500));
         var id = (ushort)Environment.ProcessId;
         var seqId = (ushort)(Random.Shared.NextInt64() >> (64 - 16));
+        rentedBuffer[0] = (byte)(id >> 8);      // Identifier
+        rentedBuffer[1] = (byte)(id & 0xFF);
+        rentedBuffer[2] = (byte)(seqId >> 8);   // Sequence
+        rentedBuffer[3] = (byte)(seqId & 0xFF);
+        payload.CopyTo(rentedBuffer.AsMemory(4, payload.Length));
+        var packet = IcmpV6Packet.Create(IcmpV6Type.EchoRequest, rentedBuffer.AsSpan(0, payload.Length + ICMP_FIXED_LENGTH));
+        
         socket.Ttl = options.Ttl;
         var startAt = TIMER.Elapsed;
         await socket.SendToAsync(packet.Raw, new IPEndPoint(host, 0), token);
         var remoteEP = ANY_ENDPOINT;
-        var rentedBuffer = ArrayPool<byte>.Shared.Rent(Math.Max(((IP_HEADER_LENGTH + ICMP_FIXED_LENGTH) * 2) + payload.Length, 1500));
         var buffer = Array.Empty<byte>();
         var bytes = 0;
+        var recvPacket = default(IcmpV6Packet);
         try
         {
-            var result = await socket.ReceiveFromAsync(rentedBuffer, remoteEP, linkedCts.Token);
-            bytes = result.ReceivedBytes;
-            remoteEP = result.RemoteEndPoint;
-            buffer = new byte[bytes];
-            rentedBuffer.AsSpan(0, bytes).CopyTo(buffer);
+            var result = default(SocketReceiveFromResult);
+            while (!token.IsCancellationRequested)
+            {
+                result = await socket.ReceiveFromAsync(rentedBuffer, remoteEP, linkedCts.Token);
+                bytes = result.ReceivedBytes;
+                if (bytes < IP_HEADER_LENGTH + ICMP_FIXED_LENGTH)
+                {
+                    BotLogger.LogWarning("NetUtils.Ping4: received an invalid icmp response packet");
+                    continue;
+                }
+                remoteEP = (IPEndPoint)result.RemoteEndPoint!;
+                buffer = new byte[bytes];
+                rentedBuffer.AsSpan(0, bytes).CopyTo(buffer);
+                recvPacket = IcmpV6Packet.Parse(buffer.AsSpan(IP_HEADER_LENGTH, bytes - IP_HEADER_LENGTH));
+                var t = (ushort)recvPacket.Type >> 8;
+                var originId = (ushort)((buffer[4] << 8) | buffer[5]);
+                var originSeq = (ushort)((buffer[6] << 8) | buffer[7]);
+                if (t is (1 or 2 or 3 or 4))
+                {
+                    var idOffset = 48 + 4;
+                    var seqOffset = 48 + 6;
+                    var rPayload = recvPacket.Payload.Span;
+                    if (rPayload.Length <= seqOffset + 1)
+                    {
+                        continue;
+                    }
+                    originId = (ushort)((rPayload[idOffset] << 8) | rPayload[idOffset + 1]);
+                    originSeq = (ushort)((rPayload[seqOffset] << 8) | rPayload[seqOffset + 1]);
+                }
+                if (originId != id || originSeq != seqId)
+                {
+                    BotLogger.LogWarning("NetUtils.Ping6: id and seq mismatch");
+                    continue;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            token.ThrowIfCancellationRequested();
         }
         catch (OperationCanceledException)
         {
@@ -120,7 +162,6 @@ internal static class NetUtils
         var recvPayloadLen = bytes - IP_HEADER_LENGTH - ICMP_FIXED_LENGTH;
         var remainingTTL = (short)254;
         var df = false;
-        var recvPacket = IcmpV6Packet.Parse(buffer.AsSpan(IP_HEADER_LENGTH, bytes - IP_HEADER_LENGTH));
 
         return new()
         {
@@ -141,6 +182,8 @@ internal static class NetUtils
         const int IP_HEADER_LENGTH = 20;
         const int TTL_POSITION = 8;
 
+        using var cts = new CancellationTokenSource(options.Timeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, cts.Token);
         using var socket = new Socket(host.AddressFamily, SocketType.Raw, ProtocolType.Icmp);
         var id = (ushort)Environment.ProcessId;
         var seqId = (ushort)(Random.Shared.NextInt64() >> (64 - 16));
@@ -156,8 +199,6 @@ internal static class NetUtils
         var recvPacket = default(IcmpPacket);
         try
         {
-            using var cts = new CancellationTokenSource(options.Timeout);
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, cts.Token);
             var result = default(SocketReceiveFromResult);
             while(!token.IsCancellationRequested)
             {
