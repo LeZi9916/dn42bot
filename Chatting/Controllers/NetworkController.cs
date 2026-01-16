@@ -830,7 +830,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                             isReached = true;
                             break;
                         case IPStatus.DestinationUnreachable:
-                            hopRTT[i] = $"{reply.RoundtripTime.TotalMilliseconds:F2}ms !F";
+                            hopRTT[i] = $"{reply.RoundtripTime.TotalMilliseconds:F2}ms !U";
                             hopAddresses.Add(reply.Address);
                             isReached = true;
                             break;
@@ -901,9 +901,10 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                             try
                             {
                                 var dnsReq = LookupClient.GetReverseQuestion(hopAddress);
-                                (isDnsHasError, dnsQueryResult) = await DnsLookupAsync(dnsReq, token: cancellationToken);
+                                var isSuccessfully = false;
+                                (isSuccessfully, dnsQueryResult) = await DnsLookupAsync(dnsReq, token: cancellationToken);
                                 whoisResult = await WhoisHelper.QueryASNFromIPAddressAsync(hopAddress, cancellationToken);
-                                isDnsHasError = !isDnsHasError;
+                                isDnsHasError = !isSuccessfully;
                             }
                             catch(OperationCanceledException)
                             {
