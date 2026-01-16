@@ -1018,6 +1018,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                 return;
             }
             var domain = default(string);
+            var addr = default(IPAddress);
             var nsAddr = default(IPAddress);
             var port = default(int?);
             var queryTypes = new HashSet<QueryType>();
@@ -1092,12 +1093,26 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                         default:
                             if (text.Length > 5 && text.Slice(text.Length - 5).Equals(".dn42", StringComparison.OrdinalIgnoreCase))
                             {
-                                if (!string.IsNullOrEmpty(domain) || domain is not null)
+                                if (!string.IsNullOrEmpty(domain) || domain is not null || addr is not null)
                                 {
                                     _ = _userMessage.ReplyAsync("Error: multiple destination specified", _botClient);
                                     return;
                                 }
                                 domain = text.ToString();
+                            }
+                            else if(IPAddress.TryParse(text, out var ip))
+                            {
+                                if (!string.IsNullOrEmpty(domain) || domain is not null || addr is not null)
+                                {
+                                    _ = _userMessage.ReplyAsync("Error: multiple destination specified", _botClient);
+                                    return;
+                                }
+                                if (!IPNetworkHelper.IsInDN42AddressSpace(ip))
+                                {
+                                    _ = _userMessage.ReplyAsync("Error: IP address out of range", _botClient);
+                                    return;
+                                }
+                                addr = ip;
                             }
                             else
                             {
@@ -1109,7 +1124,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                     lastParamName = string.Empty;
                 }
             }
-            if (string.IsNullOrEmpty(domain))
+            if (string.IsNullOrEmpty(domain) && addr is null)
             {
                 await PrintNsLookupHelpTextAsync("Error: missing domain");
                 return;
@@ -1117,8 +1132,15 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
             nsAddr ??= DEFAULT_NAMESERVER_ADDRESS;
             if(queryTypes.Count == 0)
             {
-                queryTypes.Add(QueryType.A);
-                queryTypes.Add(QueryType.AAAA);
+                if(addr is not null)
+                {
+                    queryTypes.Add(QueryType.PTR);
+                }
+                else
+                {
+                    queryTypes.Add(QueryType.A);
+                    queryTypes.Add(QueryType.AAAA);
+                }
             }
             port ??= 53;
             #endregion
@@ -1145,11 +1167,22 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
 
             try
             {
-                foreach(var queryType in queryTypes)
+                if (addr is not null)
                 {
-                    var (isSuccessfully, dnsQueryResult) = await DnsLookupAsync(domain, queryType, QueryClass.IN, dnsOptions, true, cancellationToken);
-                    dnsQueryResults.Add((isSuccessfully, dnsQueryResult));
+                    var question = LookupClient.GetReverseQuestion(addr);
+                    var result = await DnsLookupAsync(question, dnsOptions, true, cancellationToken);
+                    dnsQueryResults.Add(result);
                 }
+                else
+                {
+                    foreach (var queryType in queryTypes)
+                    {
+                        var (isSuccessfully, dnsQueryResult) = (false, default(IDnsQueryResponse));
+                        (isSuccessfully, dnsQueryResult) = await DnsLookupAsync(domain!, queryType, QueryClass.IN, dnsOptions, true, cancellationToken);
+
+                        dnsQueryResults.Add((isSuccessfully, dnsQueryResult));
+                    }
+                } 
                 using var dnsRecords = new RentedList<DnsResourceRecord>();
                 foreach(var (isSuccessfully, dnsQueryResult) in dnsQueryResults)
                 {
@@ -1168,6 +1201,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                     }
                     dnsRecords.AddRange(dnsQueryResult!.Answers);
                 }
+                var recordSample = dnsRecords.FirstOrDefault();
                 var groupedResult = dnsRecords.GroupBy(x => x.RecordType);
                 foreach (var resultGroup in groupedResult)
                 {
@@ -1246,6 +1280,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
 
                 await _sentMessage.EditAsync(MessageEntityBulilder.Html.CodeBlock($"""
                         {header}
+                        Domain: {recordSample?.DomainName.Original ?? string.Empty}
 
                         Records:
                         {sb.ToString()}
