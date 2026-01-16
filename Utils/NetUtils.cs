@@ -93,8 +93,8 @@ internal static class NetUtils
                 var originSeq = (ushort)((buffer[6] << 8) | buffer[7]);
                 if (t is (1 or 2 or 3 or 4))
                 {
-                    var idOffset = 48 + 4;
-                    var seqOffset = 48 + 6;
+                    var idOffset = 44 + 4;
+                    var seqOffset = 44 + 6;
                     var rPayload = recvPacket.Payload.Span;
                     if (rPayload.Length <= seqOffset + 1)
                     {
