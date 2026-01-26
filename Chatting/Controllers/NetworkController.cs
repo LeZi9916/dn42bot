@@ -428,14 +428,16 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                 {
                     case IPStatus.Success:
                         resultStr += $"Reply from {reply.Address}: Seq={i + 1} TTL={((PingOptions)(reply.Options!)).Ttl} Time={reply.RoundtripTime.TotalMilliseconds:F2}ms\n";
-                        totalRTT += reply.RoundtripTime;
+                        totalRTT += TimeSpan.FromMilliseconds((int)timeoutMS);
                         minRTT = reply.RoundtripTime < minRTT ? reply.RoundtripTime : minRTT;
                         maxRTT = reply.RoundtripTime > maxRTT ? reply.RoundtripTime : maxRTT;
                         break;
                     case IPStatus.TimedOut:
-                        resultStr += $"Request timed out\n";
-                        totalRTT += reply.RoundtripTime;
-                        maxRTT = reply.RoundtripTime > maxRTT ? reply.RoundtripTime : maxRTT;
+                        resultStr += $"Timed out\n";
+                        var timeoutRTT = TimeSpan.FromMilliseconds((int)timeoutMS);
+                        totalRTT += timeoutRTT;
+                        maxRTT = timeoutRTT > maxRTT ? timeoutRTT : maxRTT;
+                        minRTT = timeoutRTT < minRTT ? timeoutRTT : minRTT;
                         packetLostCount++;
                         break;
                     case IPStatus.PacketTooBig:
