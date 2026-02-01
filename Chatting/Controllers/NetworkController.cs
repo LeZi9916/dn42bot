@@ -774,7 +774,6 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                 await _sentMessage.EditAsync(MessageEntityBulilder.Html.CodeBlock(header, "bash"), _botClient, ParseMode.Html, inlineKeyboardWithCancel);
             }
             #region Trace core
-            var pingSender = new Ping();
             var buffer = new byte[(int)packetSize];
             var pingOptions = new PingOptions()
             {
@@ -861,7 +860,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                             hopAddresses.Add(null);
                             break;
                     }
-                    if (reply.Address.Equals(hostAddress))
+                    if (reply.Status == IPStatus.Success)
                     {
                         isReached = true;
                     }
