@@ -831,7 +831,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                             isReached = true;
                             break;
                         case IPStatus.DestinationUnreachable:
-                            hopRTT[i] = $"{reply.RoundtripTime.TotalMilliseconds:F2}ms !U";
+                            hopRTT[i] = $"{reply.RoundtripTime.TotalMilliseconds:F2}ms !H";
                             hopAddresses.Add(reply.Address);
                             isReached = true;
                             break;
