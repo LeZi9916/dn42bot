@@ -877,7 +877,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                     foreach (var (index, hopAddress) in hopAddresses.Index())
                     {
                         var isLast = index == hopAddresses.Count - 1;
-                        if (hopAddress is null)
+                        if (hopAddress is null) // timeout
                         {
                             if (isHasHopAddress)
                             {
@@ -938,6 +938,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                             {
                                 var hostname = dnsQueryResult!.Answers.PtrRecords()?.FirstOrDefault()?.PtrDomainName ?? hopAddress.ToString();
                                 var start = hopSb.Length;
+                                // insert hostname
                                 hopSb.Append(hostname);
                                 var end = hopSb.Length;
                                 var len = end - start;
@@ -948,7 +949,7 @@ internal sealed class NetworkController: IController, ICallbackController, ICont
                                 }
                                 hopSb.Append(asn)
                                      .AppendLine();
-
+                                // insert host address
                                 hopSb.Append("    ");
                                 start = hopSb.Length;
                                 hopSb.Append('(')
